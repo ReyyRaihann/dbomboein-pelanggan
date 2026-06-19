@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>Riwayat Pesanan</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+    <h3>Riwayat Pesanan</h3>
+
+    <button onclick="kembali()" class="back-btn">
+        ⬅ Kembali
+    </button>
+</header>
+
+<div class="filter-container">
+    <label>Filter:</label>
+    <select class="filter-status" onchange="filterStatus(this.value)">
+        <option value="all">Semua Pesanan</option>
+        <option value="Diproses">Diproses</option>
+        <option value="Dikirim">Dikirim</option>
+        <option value="Selesai">Selesai</option>
+    </select>
+</div>
+
+<div class="riwayat-box" id="riwayatList"></div>
+
+<script src="script.js"></script>
+
+</body>
+</html>

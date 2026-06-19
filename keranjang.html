@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Keranjang - Dbomboein</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+    <h3>Keranjang Belanja</h3>
+    <button onclick="kembali()" class="back-btn">⬅ Kembali</button>
+</header>
+
+<div class="cart-container">
+    <div class="cart-left">
+        <p class="cart-section-title">🛒 Produk dalam Keranjang</p>
+        <div id="keranjang" class="cart-list"></div>
+        <div class="cart-summary">
+            <span class="label">Total Pembayaran</span>
+            <h3 id="total">Rp 0</h3>
+        </div>
+    </div>
+
+    <div class="cart-right">
+        <div class="checkout-card">
+            <h2>📦 Checkout</h2>
+            <div class="form-group">
+                <label>Nama Lengkap</label>
+                <input type="text" id="nama" placeholder="Masukkan nama lengkap">
+            </div>
+            <div class="form-group">
+                <label>Alamat Pengiriman</label>
+                <input type="text" id="alamat" placeholder="Masukkan alamat lengkap">
+            </div>
+            <div class="form-group">
+                <label>Nomor HP</label>
+                <input type="text" id="nohp" placeholder="Contoh: 0812xxxxxxxx">
+            </div>
+            <div class="form-group">
+                <label>Metode Pembayaran</label>
+                <select id="metode">
+                    <option>Transfer Bank</option>
+                    <option>E-Wallet</option>
+                    <option>COD</option>
+                </select>
+            </div>
+            <hr class="divider">
+            <button class="checkout-btn" onclick="checkout()">
+                Checkout via WhatsApp →
+            </button>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="script.js"></script>
+
+</body>
+</html>
