@@ -1,4 +1,24 @@
 // =============================================
+// CLOUDINARY CONFIG
+// =============================================
+
+const CLOUDINARY_CLOUD  = "dcrtgdl1n";
+const CLOUDINARY_PRESET = "dbomboein";
+
+async function uploadGambar(file){
+    let formData = new FormData();
+    formData.append("file", file);
+    formData.append("upload_preset", CLOUDINARY_PRESET);
+    let res  = await fetch(
+        `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`,
+        { method: "POST", body: formData }
+    );
+    let data = await res.json();
+    if(data.error){ throw new Error(data.error.message); }
+    return data.secure_url;
+}
+
+// =============================================
 // SUPABASE CONFIG
 // =============================================
 
@@ -12,10 +32,10 @@ const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 // =============================================
 
 const produkDefault = [
-    {nama:"Kemiri",       tipe:"berat",  harga:{ons:5000,perempat:12500,setengah:25000,kg:50000}, gambar:"kemiri.jpeg"},
-    {nama:"Sahang",       tipe:"berat",  harga:{ons:20000,perempat:45000,setengah:90000,kg:180000}, gambar:"sahang.jpeg"},
-    {nama:"Cabe Bubuk",   tipe:"berat",  harga:{ons:10000,perempat:20000,setengah:40000,kg:80000}, gambar:"cabebbkjpeg.jpeg"},
-    {nama:"Kayu Manis",   tipe:"berat",  harga:{ons:10000,perempat:20000,setengah:40000,kg:80000}, gambar:"kayumanis.jpeg"},
+    {nama:"Kemiri",       tipe:"berat",  harga:{ons:5000,perempat:12500,setengah:25000,kg:50000}, gambar:""},
+    {nama:"Sahang",       tipe:"berat",  harga:{ons:20000,perempat:45000,setengah:90000,kg:180000}, gambar:""},
+    {nama:"Cabe Bubuk",   tipe:"berat",  harga:{ons:10000,perempat:20000,setengah:40000,kg:80000}, gambar:""},
+    {nama:"Kayu Manis",   tipe:"berat",  harga:{ons:10000,perempat:20000,setengah:40000,kg:80000}, gambar:""},
     {nama:"Bumbu Rendang Merah", tipe:"berat", harga:{perempat:20000,setengah:40000,kg:80000}, gambar:""},
     {nama:"Bumbu Rendang Hitam", tipe:"berat", harga:{perempat:25000,setengah:50000,kg:100000}, gambar:""},
     {nama:"Bumbu Babas",  tipe:"satuan", harga:{satuan:35000}, satuan:"bungkus", gambar:""},
@@ -39,9 +59,8 @@ const produkDefault = [
     {nama:"Cuka Dixi Kecil",  tipe:"satuan", harga:{satuan:5000},  satuan:"botol", gambar:""},
 ];
 
-// Keranjang tetap di localStorage (per user/browser, wajar)
 let keranjang = JSON.parse(localStorage.getItem("keranjang")) || [];
-let stokCache = {}; // cache stok dari Supabase
+let stokCache = {};
 
 // =============================================
 // HELPER
@@ -65,16 +84,14 @@ function getPilihan(item){
     }
 }
 
-function simpanData(){
-    localStorage.setItem("keranjang", JSON.stringify(keranjang));
-}
+function simpanData(){ localStorage.setItem("keranjang", JSON.stringify(keranjang)); }
 
 function updateJumlahItem(){
     let el = document.getElementById("jumlahItem");
     if(el) el.innerText = keranjang.length;
 }
 
-function showLoading(msg = "Memuat..."){
+function showLoading(msg="Memuat..."){
     let el = document.getElementById("loadingInfo");
     if(el){ el.innerText = msg; el.style.display = "block"; }
 }
@@ -85,7 +102,7 @@ function hideLoading(){
 }
 
 // =============================================
-// SUPABASE — PRODUK
+// SUPABASE — PRODUK & STOK
 // =============================================
 
 async function getProdukAll(){
@@ -103,32 +120,29 @@ async function getStokAll(){
 }
 
 async function updateStok(nama, jumlahBaru){
-    await db.from("stok").upsert({ nama_produk: nama, jumlah: jumlahBaru }, { onConflict: "nama_produk" });
+    await db.from("stok").upsert(
+        { nama_produk: nama, jumlah: jumlahBaru },
+        { onConflict: "nama_produk" }
+    );
 }
 
 async function resetProdukAwal(){
     if(!confirm("Reset semua produk ke data awal?")) return;
     showLoading("Mereset produk...");
-
-    // Hapus semua produk & stok lama
     await db.from("produk").delete().neq("id", 0);
     await db.from("stok").delete().neq("id", 0);
-
-    // Insert produk default
     for(let p of produkDefault){
-        let { data } = await db.from("produk").insert({
-            nama: p.nama,
-            tipe: p.tipe,
-            harga: p.harga,
+        await db.from("produk").insert({
+            nama: p.nama, tipe: p.tipe, harga: p.harga,
             gambar: p.gambar || "",
             satuan: p.satuan || null,
             keterangan: p.keterangan || null
-        }).select().single();
-
-        let stokAwal = p.tipe === "berat" ? 10000 : 20;
-        await db.from("stok").insert({ nama_produk: p.nama, jumlah: stokAwal });
+        });
+        await db.from("stok").insert({
+            nama_produk: p.nama,
+            jumlah: p.tipe === "berat" ? 10000 : 20
+        });
     }
-
     hideLoading();
     alert("Produk berhasil dipulihkan!");
     await loadAdminStok();
@@ -136,17 +150,16 @@ async function resetProdukAwal(){
 }
 
 // =============================================
-// LOAD PRODUK DI HALAMAN INDEX
+// HALAMAN PRODUK (INDEX)
 // =============================================
 
 async function loadProdukTambahan(){
     let container = document.getElementById("produkContainer");
     if(!container) return;
-    container.innerHTML = `<div style="text-align:center;padding:40px;color:#aaa;">Memuat produk...</div>`;
+    container.innerHTML = `<div style="text-align:center;padding:40px;color:#aaa;grid-column:1/-1;">Memuat produk...</div>`;
 
     let produk = await getProdukAll();
     stokCache  = await getStokAll();
-
     container.innerHTML = "";
 
     produk.forEach((item, index) => {
@@ -185,8 +198,7 @@ async function loadProdukTambahan(){
 
 function cariProduk(){
     let input = document.getElementById("searchInput").value.toLowerCase();
-    let items = document.querySelectorAll("#produkContainer .item");
-    items.forEach(item => {
+    document.querySelectorAll("#produkContainer .item").forEach(item => {
         let nama = item.querySelector("h3").innerText.toLowerCase();
         item.style.display = nama.includes(input) ? "block" : "none";
     });
@@ -195,6 +207,10 @@ function cariProduk(){
 // =============================================
 // KERANJANG
 // =============================================
+
+function keKeranjang(){ window.location.href = "keranjang.html"; }
+function keRiwayat(){   window.location.href = "riwayat.html"; }
+function kembali(){     window.location.href = "index.html"; }
 
 async function tambahKeranjang(nama, idSelect){
     let produk = await getProdukAll();
@@ -223,7 +239,6 @@ async function tambahKeranjang(nama, idSelect){
     simpanData();
     updateJumlahItem();
 
-    // Animasi tombol
     let btn = document.querySelector(`[data-nama="${nama}"] .btn-tambah`);
     if(btn){
         btn.innerText = "✓ Ditambahkan!";
@@ -286,7 +301,6 @@ async function checkout(){
 
     let total = keranjang.reduce((s, i) => s + i.harga, 0);
 
-    // Simpan pesanan ke Supabase
     let { error } = await db.from("pesanan").insert({
         order_id: "ORD" + Date.now(),
         tanggal:  new Date().toLocaleString(),
@@ -295,18 +309,15 @@ async function checkout(){
         items:  keranjang
     });
 
-    if(error){ alert("Gagal menyimpan pesanan, coba lagi!"); console.error(error); return; }
+    if(error){ alert("Gagal menyimpan pesanan, coba lagi!"); return; }
 
-    // Kurangi stok di Supabase
     for(let item of keranjang){
-        let stokSaat = stokCache[item.nama] || 0;
         let kurang   = item.tipe === "berat" ? parseInt(item.berat) : 1;
-        let stokBaru = Math.max(0, stokSaat - kurang);
+        let stokBaru = Math.max(0, (stokCache[item.nama] || 0) - kurang);
         await updateStok(item.nama, stokBaru);
         stokCache[item.nama] = stokBaru;
     }
 
-    // Kirim WA
     let pesan = `Halo, saya ingin memesan:%0A`;
     keranjang.forEach(item => {
         pesan += `- ${item.nama} (${item.pilihan || item.berat+"g"}) : ${formatRp(item.harga)}%0A`;
@@ -331,11 +342,8 @@ async function loadRiwayat(){
     let container = document.getElementById("riwayatList");
     if(!container) return;
     container.innerHTML = `<div style="text-align:center;padding:40px;color:#aaa;">Memuat riwayat...</div>`;
-
-    let { data, error } = await db.from("pesanan").select("*").order("id", {ascending: false});
-    if(error || !data){ container.innerHTML = "<p>Gagal memuat riwayat.</p>"; return; }
-
-    renderRiwayat(data, container, data);
+    let { data } = await db.from("pesanan").select("*").order("id", {ascending:false});
+    renderRiwayat(data || [], container, data || []);
 }
 
 function renderRiwayat(data, container, semua){
@@ -408,16 +416,12 @@ async function loadAdminPesanan(){
     let container = document.getElementById("adminPesanan");
     if(!container) return;
     container.innerHTML = `<div style="padding:20px;color:#aaa;">Memuat pesanan...</div>`;
-
-    let { data, error } = await db.from("pesanan").select("*").order("id", {ascending:false});
-    if(error || !data){ container.innerHTML = "<p>Gagal memuat.</p>"; return; }
-
-    container.innerHTML = "";
-    if(data.length === 0){
+    let { data } = await db.from("pesanan").select("*").order("id", {ascending:false});
+    if(!data || data.length === 0){
         container.innerHTML = `<div style="text-align:center;padding:40px;color:#aaa;">Belum ada pesanan</div>`;
         return;
     }
-
+    container.innerHTML = "";
     data.forEach(order => {
         let warna = order.status==="Dikirim"?"blue":order.status==="Selesai"?"green":"orange";
         let itemsText = (order.items||[]).map(i=>
@@ -431,21 +435,17 @@ async function loadAdminPesanan(){
             <p><b>Alamat:</b> ${order.alamat}</p>
             <p><b>No HP:</b> ${order.nohp}</p>
             <p><b>Metode:</b> ${order.metode}</p>
-            <div style="margin:8px 0;line-height:1.8;">${itemsText}</div>
+            <div style="margin:8px 0;line-height:2;">${itemsText}</div>
             <p><b>Total:</b> ${formatRp(order.total)}</p>
             <p><b>Status:</b> <span style="color:${warna};font-weight:bold">${order.status}</span></p>
             <button onclick="nextStatusAdmin('${order.order_id}','${order.status}')"
-                style="margin-top:8px;background:#1976d2">
-                🔄 Update Status
-            </button>`;
+                style="margin-top:8px;background:#1976d2">🔄 Update Status</button>`;
         container.appendChild(div);
     });
 }
 
 async function nextStatusAdmin(orderId, statusSaat){
-    let statusBaru = statusSaat==="Diproses" ? "Dikirim"
-                   : statusSaat==="Dikirim"  ? "Selesai"
-                   : "Selesai";
+    let statusBaru = statusSaat==="Diproses"?"Dikirim":statusSaat==="Dikirim"?"Selesai":"Selesai";
     await db.from("pesanan").update({status: statusBaru}).eq("order_id", orderId);
     loadAdminPesanan();
 }
@@ -457,12 +457,11 @@ async function nextStatusAdmin(orderId, statusSaat){
 async function loadAdminStok(){
     let container = document.getElementById("adminStok");
     if(!container) return;
-    container.innerHTML = `<div style="padding:20px;color:#aaa;">Memuat produk...</div>`;
+    container.innerHTML = `<div style="padding:20px;color:#aaa;grid-column:1/-1;">Memuat produk...</div>`;
 
     let produk = await getProdukAll();
     let stok   = await getStokAll();
     stokCache  = stok;
-
     container.innerHTML = "";
 
     produk.forEach(item => {
@@ -474,10 +473,8 @@ async function loadAdminStok(){
         let hargaHtml = "";
         if(item.tipe === "berat"){
             hargaHtml = Object.entries({
-                "1 ons":item.harga.ons,
-                "1/4 kg":item.harga.perempat,
-                "1/2 kg":item.harga.setengah,
-                "1 kg":item.harga.kg
+                "1 ons":item.harga.ons,"1/4 kg":item.harga.perempat,
+                "1/2 kg":item.harga.setengah,"1 kg":item.harga.kg
             }).filter(([k,v])=>v!==undefined)
               .map(([k,v])=>`<small>${k}: ${formatRp(v)}</small>`).join(" | ");
         } else {
@@ -487,7 +484,6 @@ async function loadAdminStok(){
         }
 
         let safeId = item.nama.replace(/[^a-zA-Z0-9]/g,'');
-
         container.innerHTML += `
 <div class="stok-card">
     <img src="${item.gambar||'https://placehold.co/300x200/f5f5f5/999?text=Produk'}"
@@ -501,8 +497,11 @@ async function loadAdminStok(){
     <label style="font-size:12px;color:#888;">Nama Baru</label>
     <input type="text" id="editNama${safeId}" placeholder="Nama baru (opsional)">
 
-    <label style="font-size:12px;color:#888;">Ganti Gambar (URL)</label>
-    <input type="text" id="editGambar${safeId}" placeholder="https://... atau kosongkan">
+    <label style="font-size:12px;color:#888;">Ganti Gambar</label>
+    <input type="file" id="editGambar${safeId}" accept="image/*"
+        onchange="previewEditGambar('${safeId}')">
+    <img id="previewEdit${safeId}" style="display:none;width:100%;height:120px;
+        object-fit:cover;border-radius:8px;margin:6px 0;">
 
     <label style="font-size:12px;color:#888;">Tambah / Kurangi Stok</label>
     <input type="number" id="inputStok${safeId}" placeholder="Jumlah">
@@ -515,6 +514,17 @@ async function loadAdminStok(){
     <button onclick="hapusProduk('${item.nama}')" style="margin-top:5px;background:#e53935">🗑 Hapus</button>
 </div>`;
     });
+}
+
+function previewEditGambar(safeId){
+    let file = document.getElementById("editGambar"+safeId)?.files[0];
+    if(!file) return;
+    let reader = new FileReader();
+    reader.onload = e => {
+        let prev = document.getElementById("previewEdit"+safeId);
+        if(prev){ prev.src = e.target.result; prev.style.display = "block"; }
+    };
+    reader.readAsDataURL(file);
 }
 
 async function tambahStokCustom(nama){
@@ -540,24 +550,29 @@ async function kurangStokCustom(nama){
 }
 
 async function editProduk(nama){
-    let safeId    = nama.replace(/[^a-zA-Z0-9]/g,'');
-    let namaBaru  = document.getElementById("editNama"+safeId)?.value.trim();
-    let gambarBaru= document.getElementById("editGambar"+safeId)?.value.trim();
-
-    let produk = await getProdukAll();
-    let item   = produk.find(p => p.nama === nama);
-    if(!item){ alert("Produk tidak ditemukan"); return; }
+    let safeId     = nama.replace(/[^a-zA-Z0-9]/g,'');
+    let namaBaru   = document.getElementById("editNama"+safeId)?.value.trim();
+    let gambarFile = document.getElementById("editGambar"+safeId)?.files[0];
 
     let update = {};
-    if(namaBaru)   update.nama   = namaBaru;
-    if(gambarBaru) update.gambar = gambarBaru;
+    if(namaBaru) update.nama = namaBaru;
+
+    if(gambarFile){
+        showLoading("Mengupload gambar...");
+        try {
+            let url = await uploadGambar(gambarFile);
+            update.gambar = url;
+        } catch(e) {
+            hideLoading(); alert("Gagal upload gambar: " + e.message); return;
+        }
+        hideLoading();
+    }
 
     if(Object.keys(update).length === 0){ alert("Tidak ada yang diubah."); return; }
 
     await db.from("produk").update(update).eq("nama", nama);
 
     if(namaBaru){
-        // Update stok key
         let stokLama = stokCache[nama] || 0;
         await db.from("stok").update({nama_produk: namaBaru}).eq("nama_produk", nama);
         stokCache[namaBaru] = stokLama;
@@ -591,18 +606,33 @@ function toggleTipeProduk(){
     if(secPak)    secPak.style.display    = tipe==="pak"    ? "block" : "none";
 }
 
+function previewGambar(){
+    let file = document.getElementById("gambarProdukBaru")?.files[0];
+    if(!file) return;
+    let reader = new FileReader();
+    reader.onload = e => {
+        let prev = document.getElementById("previewGambar");
+        if(prev){ prev.src = e.target.result; prev.style.display = "block"; }
+    };
+    reader.readAsDataURL(file);
+}
+
 async function tambahProdukBaru(){
     let nama  = document.getElementById("namaProdukBaru")?.value.trim();
     let tipe  = document.getElementById("tipeProduk")?.value;
     let stok  = parseInt(document.getElementById("stokProdukBaru")?.value);
-    let gambar= document.getElementById("urlGambarBaru")?.value.trim() || "";
+    let file  = document.getElementById("gambarProdukBaru")?.files[0];
 
     if(!nama){ alert("Nama produk wajib diisi!"); return; }
     if(isNaN(stok)||stok<0){ alert("Stok tidak valid!"); return; }
 
+    let produk = await getProdukAll();
+    if(produk.find(p=>p.nama.toLowerCase()===nama.toLowerCase())){
+        alert("Nama produk sudah ada!"); return;
+    }
+
     let hargaObj = {};
-    let satuanStr = "";
-    let keteranganStr = "";
+    let satuanStr = "", keteranganStr = "";
 
     if(tipe === "berat"){
         let ons      = parseInt(document.getElementById("hargaOns")?.value)||0;
@@ -626,26 +656,33 @@ async function tambahProdukBaru(){
         keteranganStr = document.getElementById("keteranganPak")?.value.trim() || "";
     }
 
-    showLoading("Menyimpan produk...");
+    let gambarUrl = "";
+    if(file){
+        showLoading("Mengupload gambar...");
+        try { gambarUrl = await uploadGambar(file); }
+        catch(e){ hideLoading(); alert("Gagal upload gambar: " + e.message); return; }
+        hideLoading();
+    }
 
+    showLoading("Menyimpan produk...");
     let { error } = await db.from("produk").insert({
-        nama, tipe,
-        harga: hargaObj,
-        gambar: gambar || "",
+        nama, tipe, harga: hargaObj,
+        gambar: gambarUrl,
         satuan: satuanStr || null,
         keterangan: keteranganStr || null
     });
 
-    if(error){ hideLoading(); alert("Gagal tambah produk: " + error.message); return; }
-
+    if(error){ hideLoading(); alert("Gagal: " + error.message); return; }
     await db.from("stok").insert({ nama_produk: nama, jumlah: stok });
-
     hideLoading();
     alert("Produk berhasil ditambahkan!");
 
     ["namaProdukBaru","stokProdukBaru","hargaOns","hargaPerempat","hargaSetengah",
-     "hargaKg","hargaSatuan","namaJenisSatuan","hargaPak","keteranganPak","urlGambarBaru"]
+     "hargaKg","hargaSatuan","namaJenisSatuan","hargaPak","keteranganPak"]
     .forEach(id => { let el=document.getElementById(id); if(el) el.value=""; });
+    document.getElementById("gambarProdukBaru").value = "";
+    let prev = document.getElementById("previewGambar");
+    if(prev){ prev.src=""; prev.style.display="none"; }
 
     loadAdminStok();
 }
@@ -653,6 +690,9 @@ async function tambahProdukBaru(){
 // =============================================
 // ADMIN - LOGIN / LOGOUT / AKUN
 // =============================================
+
+if(!localStorage.getItem("adminUser")) localStorage.setItem("adminUser","admin");
+if(!localStorage.getItem("adminPass")) localStorage.setItem("adminPass","admin123");
 
 function loginAdmin(){
     let user = document.getElementById("adminUser")?.value;
@@ -680,9 +720,6 @@ function ubahAkunAdmin(){
     document.getElementById("userBaru").value = "";
     document.getElementById("passBaru").value = "";
 }
-
-if(!localStorage.getItem("adminUser")) localStorage.setItem("adminUser","admin");
-if(!localStorage.getItem("adminPass")) localStorage.setItem("adminPass","admin123");
 
 // =============================================
 // STATISTIK & GRAFIK
@@ -717,13 +754,13 @@ async function buatGrafikPendapatan(){
     let canvas = document.getElementById("grafikPendapatan");
     if(!canvas) return;
     let { data } = await db.from("pesanan").select("order_id,total").order("id");
-    if(!data) return;
+    if(!data||data.length===0) return;
     new Chart(canvas, {
         type: 'bar',
         data: {
             labels: data.map(o => o.order_id),
-            datasets:[{ label:'Pendapatan', data: data.map(o=>o.total),
-                backgroundColor:'rgba(255,152,0,0.7)' }]
+            datasets:[{ label:'Pendapatan (Rp)', data: data.map(o=>o.total),
+                backgroundColor:'rgba(255,152,0,0.7)', borderColor:'#ff9800', borderWidth:1 }]
         },
         options:{ responsive:true }
     });
@@ -731,8 +768,7 @@ async function buatGrafikPendapatan(){
 
 function cariProdukAdmin(){
     let keyword = document.getElementById("cariAdmin")?.value.toLowerCase();
-    let cards   = document.querySelectorAll("#adminStok .stok-card");
-    cards.forEach(card => {
+    document.querySelectorAll("#adminStok .stok-card").forEach(card => {
         let nama = card.querySelector("h3").innerText.toLowerCase();
         card.style.display = nama.includes(keyword) ? "block" : "none";
     });
