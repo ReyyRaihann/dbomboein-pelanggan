@@ -688,36 +688,66 @@ async function tambahProdukBaru(){
 }
 
 // =============================================
-// ADMIN - LOGIN / LOGOUT / AKUN
+// ADMIN - LOGIN / LOGOUT / AKUN (Supabase Auth)
 // =============================================
 
-if(!localStorage.getItem("adminUser")) localStorage.setItem("adminUser","admin");
-if(!localStorage.getItem("adminPass")) localStorage.setItem("adminPass","admin123");
+async function loginAdmin(){
+    let email = document.getElementById("adminEmail")?.value.trim();
+    let pass  = document.getElementById("adminPass")?.value;
+    if(!email || !pass){ alert("Isi email dan password!"); return; }
 
-function loginAdmin(){
-    let user = document.getElementById("adminUser")?.value;
-    let pass = document.getElementById("adminPass")?.value;
-    if(user===localStorage.getItem("adminUser") && pass===localStorage.getItem("adminPass")){
-        localStorage.setItem("adminLogin","true");
+    let btn = document.querySelector(".login-box button");
+    if(btn){ btn.disabled = true; btn.innerText = "Memproses..."; }
+
+    let { error } = await db.auth.signInWithPassword({ email, password: pass });
+
+    if(btn){ btn.disabled = false; btn.innerText = "Login Admin"; }
+
+    if(error){
+        alert("Email atau Password salah!");
+        return;
+    }
+    window.location.href = "admin.html";
+}
+
+// Jika sudah login & masih buka halaman login, langsung lempar ke admin.html
+async function cekSudahLogin(){
+    let { data } = await db.auth.getSession();
+    if(data.session){
         window.location.href = "admin.html";
-    } else {
-        alert("Username atau Password Salah!");
     }
 }
 
-function logoutAdmin(){
-    localStorage.removeItem("adminLogin");
+// Penjaga halaman admin.html — wajib ada session yang valid
+async function jagaHalamanAdmin(){
+    let { data } = await db.auth.getSession();
+    if(!data.session){
+        window.location.href = "loginadmin.html";
+        return false;
+    }
+    document.body.style.display = "block";
+
+    // Kalau session hilang/expired saat halaman terbuka, otomatis tendang keluar
+    db.auth.onAuthStateChange((event, session) => {
+        if(!session) window.location.href = "loginadmin.html";
+    });
+    return true;
+}
+
+async function logoutAdmin(){
+    await db.auth.signOut();
     window.location.href = "loginadmin.html";
 }
 
-function ubahAkunAdmin(){
-    let user = document.getElementById("userBaru")?.value;
-    let pass = document.getElementById("passBaru")?.value;
-    if(!user||!pass){ alert("Isi username dan password!"); return; }
-    localStorage.setItem("adminUser", user);
-    localStorage.setItem("adminPass", pass);
-    alert("Akun admin berhasil diubah!");
-    document.getElementById("userBaru").value = "";
+async function ubahAkunAdmin(){
+    let passBaru = document.getElementById("passBaru")?.value;
+    if(!passBaru){ alert("Isi password baru!"); return; }
+    if(passBaru.length < 6){ alert("Password minimal 6 karakter!"); return; }
+
+    let { error } = await db.auth.updateUser({ password: passBaru });
+    if(error){ alert("Gagal mengubah password: " + error.message); return; }
+
+    alert("Password admin berhasil diubah!");
     document.getElementById("passBaru").value = "";
 }
 
@@ -779,14 +809,28 @@ function cariProdukAdmin(){
 // =============================================
 
 window.addEventListener("load", async function(){
+    // Halaman login admin
+    if(document.getElementById("adminEmail")){
+        await cekSudahLogin();
+        return;
+    }
+
+    // Halaman admin — wajib login dulu
+    if(document.getElementById("adminPesanan")){
+        let ok = await jagaHalamanAdmin();
+        if(!ok) return;
+        await loadStatistik();
+        await loadAdminStok();
+        await loadAdminPesanan();
+        await hitungProdukTerlaris();
+        await buatGrafikPendapatan();
+        toggleTipeProduk();
+        return;
+    }
+
+    // Halaman publik (index, keranjang, riwayat)
     updateJumlahItem();
     loadKeranjang();
     await loadProdukTambahan();
     await loadRiwayat();
-    await loadStatistik();
-    await loadAdminStok();
-    await loadAdminPesanan();
-    await hitungProdukTerlaris();
-    await buatGrafikPendapatan();
-    toggleTipeProduk();
 });
