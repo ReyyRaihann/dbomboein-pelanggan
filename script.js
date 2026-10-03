@@ -14,7 +14,7 @@ async function uploadGambar(file){
         { method: "POST", body: formData }
     );
     let data = await res.json();
-    if(data.error){ throw new Error(data.error.message); }
+    if(data.error) throw new Error(data.error.message);
     return data.secure_url;
 }
 
@@ -102,6 +102,50 @@ function hideLoading(){
 }
 
 // =============================================
+// AUTH - LOGIN & LOGOUT ADMIN
+// =============================================
+
+async function loginAdmin(){
+    let email = document.getElementById("adminEmail")?.value.trim();
+    let pass  = document.getElementById("adminPass")?.value;
+    let errEl = document.getElementById("loginError");
+    let btn   = document.getElementById("btnLogin");
+
+    if(!email || !pass){
+        if(errEl){ errEl.innerText = "Isi email dan password!"; errEl.style.display = "block"; }
+        return;
+    }
+
+    if(btn){ btn.innerText = "Masuk..."; btn.disabled = true; }
+
+    let { data, error } = await db.auth.signInWithPassword({ email, password: pass });
+
+    if(error){
+        if(errEl){ errEl.innerText = "Email atau password salah!"; errEl.style.display = "block"; }
+        if(btn){ btn.innerText = "Masuk"; btn.disabled = false; }
+        return;
+    }
+
+    // Login berhasil → redirect ke admin
+    window.location.href = "admin.html";
+}
+
+async function logoutAdmin(){
+    await db.auth.signOut();
+    window.location.href = "loginadmin.html";
+}
+
+// Cek session admin — panggil di admin.html
+async function cekSessionAdmin(){
+    let { data: { session } } = await db.auth.getSession();
+    if(!session){
+        window.location.href = "loginadmin.html";
+        return false;
+    }
+    return true;
+}
+
+// =============================================
 // SUPABASE — PRODUK & STOK
 // =============================================
 
@@ -156,7 +200,8 @@ async function resetProdukAwal(){
 async function loadProdukTambahan(){
     let container = document.getElementById("produkContainer");
     if(!container) return;
-    container.innerHTML = `<div style="text-align:center;padding:40px;color:#aaa;grid-column:1/-1;">Memuat produk...</div>`;
+    container.innerHTML = `<div style="text-align:center;padding:40px;color:#aaa;
+        grid-column:1/-1;">Memuat produk...</div>`;
 
     let produk = await getProdukAll();
     stokCache  = await getStokAll();
@@ -325,7 +370,7 @@ async function checkout(){
     pesan += `%0ATotal: ${formatRp(total)}%0A`;
     pesan += `Nama: ${nama}%0AAlamat: ${alamat}%0ANo HP: ${nohp}%0AMetode: ${metode}`;
 
-    window.open(`https://wa.me/6285378445758?text=${pesan}`, "_blank");
+   window.location.href = `https://wa.me/6285378445758?text=${pesan}`;
 
     keranjang = [];
     simpanData();
@@ -341,7 +386,8 @@ async function checkout(){
 async function loadRiwayat(){
     let container = document.getElementById("riwayatList");
     if(!container) return;
-    container.innerHTML = `<div style="text-align:center;padding:40px;color:#aaa;">Memuat riwayat...</div>`;
+    container.innerHTML = `<div style="text-align:center;padding:40px;color:#aaa;">
+        Memuat riwayat...</div>`;
     let { data } = await db.from("pesanan").select("*").order("id", {ascending:false});
     renderRiwayat(data || [], container, data || []);
 }
@@ -371,15 +417,22 @@ function renderRiwayat(data, container, semua){
                 <div><span>No HP</span><br><strong>${order.nohp}</strong></div>
             </div>
             <div class="riwayat-produk">${itemsText}</div>
-            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-top:8px;">
+            <div style="display:flex;justify-content:space-between;
+                align-items:center;flex-wrap:wrap;gap:8px;margin-top:8px;">
                 <span class="riwayat-total">${formatRp(order.total)}</span>
                 <span class="badge-status badge-${order.status}">${order.status}</span>
             </div>
-            <div class="progress-label"><span>Diproses</span><span>Dikirim</span><span>Selesai</span></div>
-            <div class="progress-bar"><div class="progress" style="width:${progress}%"></div></div>
+            <div class="progress-label">
+                <span>Diproses</span><span>Dikirim</span><span>Selesai</span>
+            </div>
+            <div class="progress-bar">
+                <div class="progress" style="width:${progress}%"></div>
+            </div>
             <div class="riwayat-actions">
-                <button class="btn-pesan-lagi" onclick='pesanLagi(${JSON.stringify(order.items)})'>🔄 Pesan Lagi</button>
-                <button class="btn-hapus-riwayat" onclick="hapusRiwayat('${order.order_id}')">🗑️ Hapus</button>
+                <button class="btn-pesan-lagi"
+                    onclick='pesanLagi(${JSON.stringify(order.items)})'>🔄 Pesan Lagi</button>
+                <button class="btn-hapus-riwayat"
+                    onclick="hapusRiwayat('${order.order_id}')">🗑️ Hapus</button>
             </div>`;
         container.appendChild(div);
     });
@@ -418,14 +471,16 @@ async function loadAdminPesanan(){
     container.innerHTML = `<div style="padding:20px;color:#aaa;">Memuat pesanan...</div>`;
     let { data } = await db.from("pesanan").select("*").order("id", {ascending:false});
     if(!data || data.length === 0){
-        container.innerHTML = `<div style="text-align:center;padding:40px;color:#aaa;">Belum ada pesanan</div>`;
+        container.innerHTML = `<div style="text-align:center;padding:40px;color:#aaa;">
+            Belum ada pesanan</div>`;
         return;
     }
     container.innerHTML = "";
     data.forEach(order => {
         let warna = order.status==="Dikirim"?"blue":order.status==="Selesai"?"green":"orange";
         let itemsText = (order.items||[]).map(i=>
-            `<small>• ${i.nama} (${i.pilihan||i.berat+"g"}) — ${formatRp(i.harga)}</small>`).join("<br>");
+            `<small>• ${i.nama} (${i.pilihan||i.berat+"g"}) — ${formatRp(i.harga)}</small>`)
+            .join("<br>");
         let div = document.createElement("div");
         div.className = "riwayat-item";
         div.innerHTML = `
@@ -437,7 +492,9 @@ async function loadAdminPesanan(){
             <p><b>Metode:</b> ${order.metode}</p>
             <div style="margin:8px 0;line-height:2;">${itemsText}</div>
             <p><b>Total:</b> ${formatRp(order.total)}</p>
-            <p><b>Status:</b> <span style="color:${warna};font-weight:bold">${order.status}</span></p>
+            <p><b>Status:</b>
+                <span style="color:${warna};font-weight:bold">${order.status}</span>
+            </p>
             <button onclick="nextStatusAdmin('${order.order_id}','${order.status}')"
                 style="margin-top:8px;background:#1976d2">🔄 Update Status</button>`;
         container.appendChild(div);
@@ -445,8 +502,9 @@ async function loadAdminPesanan(){
 }
 
 async function nextStatusAdmin(orderId, statusSaat){
-    let statusBaru = statusSaat==="Diproses"?"Dikirim":statusSaat==="Dikirim"?"Selesai":"Selesai";
-    await db.from("pesanan").update({status: statusBaru}).eq("order_id", orderId);
+    let statusBaru = statusSaat==="Diproses"?"Dikirim"
+                   : statusSaat==="Dikirim" ?"Selesai":"Selesai";
+    await db.from("pesanan").update({status:statusBaru}).eq("order_id", orderId);
     loadAdminPesanan();
 }
 
@@ -457,7 +515,8 @@ async function nextStatusAdmin(orderId, statusSaat){
 async function loadAdminStok(){
     let container = document.getElementById("adminStok");
     if(!container) return;
-    container.innerHTML = `<div style="padding:20px;color:#aaa;grid-column:1/-1;">Memuat produk...</div>`;
+    container.innerHTML = `<div style="padding:20px;color:#aaa;grid-column:1/-1;">
+        Memuat produk...</div>`;
 
     let produk = await getProdukAll();
     let stok   = await getStokAll();
@@ -473,8 +532,8 @@ async function loadAdminStok(){
         let hargaHtml = "";
         if(item.tipe === "berat"){
             hargaHtml = Object.entries({
-                "1 ons":item.harga.ons,"1/4 kg":item.harga.perempat,
-                "1/2 kg":item.harga.setengah,"1 kg":item.harga.kg
+                "1 ons":item.harga.ons, "1/4 kg":item.harga.perempat,
+                "1/2 kg":item.harga.setengah, "1 kg":item.harga.kg
             }).filter(([k,v])=>v!==undefined)
               .map(([k,v])=>`<small>${k}: ${formatRp(v)}</small>`).join(" | ");
         } else {
@@ -508,10 +567,13 @@ async function loadAdminStok(){
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:5px">
         <button onclick="tambahStokCustom('${item.nama}')">➕ Tambah</button>
-        <button onclick="kurangStokCustom('${item.nama}')" style="background:#e53935">➖ Kurangi</button>
+        <button onclick="kurangStokCustom('${item.nama}')"
+            style="background:#e53935">➖ Kurangi</button>
     </div>
-    <button onclick="editProduk('${item.nama}')" style="margin-top:8px;background:#1976d2">✏ Simpan Edit</button>
-    <button onclick="hapusProduk('${item.nama}')" style="margin-top:5px;background:#e53935">🗑 Hapus</button>
+    <button onclick="editProduk('${item.nama}')"
+        style="margin-top:8px;background:#1976d2">✏ Simpan Edit</button>
+    <button onclick="hapusProduk('${item.nama}')"
+        style="margin-top:5px;background:#e53935">🗑 Hapus</button>
 </div>`;
     });
 }
@@ -553,18 +615,14 @@ async function editProduk(nama){
     let safeId     = nama.replace(/[^a-zA-Z0-9]/g,'');
     let namaBaru   = document.getElementById("editNama"+safeId)?.value.trim();
     let gambarFile = document.getElementById("editGambar"+safeId)?.files[0];
+    let update     = {};
 
-    let update = {};
-    if(namaBaru) update.nama = namaBaru;
+    if(namaBaru)   update.nama = namaBaru;
 
     if(gambarFile){
         showLoading("Mengupload gambar...");
-        try {
-            let url = await uploadGambar(gambarFile);
-            update.gambar = url;
-        } catch(e) {
-            hideLoading(); alert("Gagal upload gambar: " + e.message); return;
-        }
+        try { update.gambar = await uploadGambar(gambarFile); }
+        catch(e){ hideLoading(); alert("Gagal upload: "+e.message); return; }
         hideLoading();
     }
 
@@ -573,9 +631,8 @@ async function editProduk(nama){
     await db.from("produk").update(update).eq("nama", nama);
 
     if(namaBaru){
-        let stokLama = stokCache[nama] || 0;
-        await db.from("stok").update({nama_produk: namaBaru}).eq("nama_produk", nama);
-        stokCache[namaBaru] = stokLama;
+        await db.from("stok").update({nama_produk:namaBaru}).eq("nama_produk", nama);
+        stokCache[namaBaru] = stokCache[nama]||0;
         delete stokCache[nama];
     }
 
@@ -618,10 +675,10 @@ function previewGambar(){
 }
 
 async function tambahProdukBaru(){
-    let nama  = document.getElementById("namaProdukBaru")?.value.trim();
-    let tipe  = document.getElementById("tipeProduk")?.value;
-    let stok  = parseInt(document.getElementById("stokProdukBaru")?.value);
-    let file  = document.getElementById("gambarProdukBaru")?.files[0];
+    let nama = document.getElementById("namaProdukBaru")?.value.trim();
+    let tipe = document.getElementById("tipeProduk")?.value;
+    let stok = parseInt(document.getElementById("stokProdukBaru")?.value);
+    let file = document.getElementById("gambarProdukBaru")?.files[0];
 
     if(!nama){ alert("Nama produk wajib diisi!"); return; }
     if(isNaN(stok)||stok<0){ alert("Stok tidak valid!"); return; }
@@ -631,8 +688,7 @@ async function tambahProdukBaru(){
         alert("Nama produk sudah ada!"); return;
     }
 
-    let hargaObj = {};
-    let satuanStr = "", keteranganStr = "";
+    let hargaObj = {}, satuanStr = "", keteranganStr = "";
 
     if(tipe === "berat"){
         let ons      = parseInt(document.getElementById("hargaOns")?.value)||0;
@@ -648,31 +704,29 @@ async function tambahProdukBaru(){
         let h = parseInt(document.getElementById("hargaSatuan")?.value)||0;
         if(!h){ alert("Isi harga satuan!"); return; }
         hargaObj.satuan = h;
-        satuanStr = document.getElementById("namaJenisSatuan")?.value.trim() || "pcs";
+        satuanStr = document.getElementById("namaJenisSatuan")?.value.trim()||"pcs";
     } else if(tipe === "pak"){
         let h = parseInt(document.getElementById("hargaPak")?.value)||0;
         if(!h){ alert("Isi harga pak!"); return; }
         hargaObj.satuan = h;
-        keteranganStr = document.getElementById("keteranganPak")?.value.trim() || "";
+        keteranganStr = document.getElementById("keteranganPak")?.value.trim()||"";
     }
 
     let gambarUrl = "";
     if(file){
         showLoading("Mengupload gambar...");
         try { gambarUrl = await uploadGambar(file); }
-        catch(e){ hideLoading(); alert("Gagal upload gambar: " + e.message); return; }
+        catch(e){ hideLoading(); alert("Gagal upload: "+e.message); return; }
         hideLoading();
     }
 
     showLoading("Menyimpan produk...");
     let { error } = await db.from("produk").insert({
-        nama, tipe, harga: hargaObj,
-        gambar: gambarUrl,
-        satuan: satuanStr || null,
-        keterangan: keteranganStr || null
+        nama, tipe, harga: hargaObj, gambar: gambarUrl,
+        satuan: satuanStr||null, keterangan: keteranganStr||null
     });
 
-    if(error){ hideLoading(); alert("Gagal: " + error.message); return; }
+    if(error){ hideLoading(); alert("Gagal: "+error.message); return; }
     await db.from("stok").insert({ nama_produk: nama, jumlah: stok });
     hideLoading();
     alert("Produk berhasil ditambahkan!");
@@ -683,72 +737,7 @@ async function tambahProdukBaru(){
     document.getElementById("gambarProdukBaru").value = "";
     let prev = document.getElementById("previewGambar");
     if(prev){ prev.src=""; prev.style.display="none"; }
-
     loadAdminStok();
-}
-
-// =============================================
-// ADMIN - LOGIN / LOGOUT / AKUN (Supabase Auth)
-// =============================================
-
-async function loginAdmin(){
-    let email = document.getElementById("adminEmail")?.value.trim();
-    let pass  = document.getElementById("adminPass")?.value;
-    if(!email || !pass){ alert("Isi email dan password!"); return; }
-
-    let btn = document.querySelector(".login-box button");
-    if(btn){ btn.disabled = true; btn.innerText = "Memproses..."; }
-
-    let { error } = await db.auth.signInWithPassword({ email, password: pass });
-
-    if(btn){ btn.disabled = false; btn.innerText = "Login Admin"; }
-
-    if(error){
-        alert("Email atau Password salah!");
-        return;
-    }
-    window.location.href = "admin.html";
-}
-
-// Jika sudah login & masih buka halaman login, langsung lempar ke admin.html
-async function cekSudahLogin(){
-    let { data } = await db.auth.getSession();
-    if(data.session){
-        window.location.href = "admin.html";
-    }
-}
-
-// Penjaga halaman admin.html — wajib ada session yang valid
-async function jagaHalamanAdmin(){
-    let { data } = await db.auth.getSession();
-    if(!data.session){
-        window.location.href = "loginadmin.html";
-        return false;
-    }
-    document.body.style.display = "block";
-
-    // Kalau session hilang/expired saat halaman terbuka, otomatis tendang keluar
-    db.auth.onAuthStateChange((event, session) => {
-        if(!session) window.location.href = "loginadmin.html";
-    });
-    return true;
-}
-
-async function logoutAdmin(){
-    await db.auth.signOut();
-    window.location.href = "loginadmin.html";
-}
-
-async function ubahAkunAdmin(){
-    let passBaru = document.getElementById("passBaru")?.value;
-    if(!passBaru){ alert("Isi password baru!"); return; }
-    if(passBaru.length < 6){ alert("Password minimal 6 karakter!"); return; }
-
-    let { error } = await db.auth.updateUser({ password: passBaru });
-    if(error){ alert("Gagal mengubah password: " + error.message); return; }
-
-    alert("Password admin berhasil diubah!");
-    document.getElementById("passBaru").value = "";
 }
 
 // =============================================
@@ -809,28 +798,24 @@ function cariProdukAdmin(){
 // =============================================
 
 window.addEventListener("load", async function(){
-    // Halaman login admin
-    if(document.getElementById("adminEmail")){
-        await cekSudahLogin();
-        return;
-    }
+    // Cek apakah di halaman admin
+    let isAdminPage = document.getElementById("adminStok") !== null;
+    let isLoginPage = document.getElementById("adminEmail") !== null;
 
-    // Halaman admin — wajib login dulu
-    if(document.getElementById("adminPesanan")){
-        let ok = await jagaHalamanAdmin();
+    if(isAdminPage){
+        // Cek session dulu sebelum load apapun
+        let ok = await cekSessionAdmin();
         if(!ok) return;
-        await loadStatistik();
-        await loadAdminStok();
-        await loadAdminPesanan();
-        await hitungProdukTerlaris();
-        await buatGrafikPendapatan();
-        toggleTipeProduk();
-        return;
     }
 
-    // Halaman publik (index, keranjang, riwayat)
     updateJumlahItem();
     loadKeranjang();
     await loadProdukTambahan();
     await loadRiwayat();
+    await loadStatistik();
+    await loadAdminStok();
+    await loadAdminPesanan();
+    await hitungProdukTerlaris();
+    await buatGrafikPendapatan();
+    toggleTipeProduk();
 });
